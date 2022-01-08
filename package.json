@@ -1,0 +1,34 @@
+{
+  "name": "knapsack",
+  "version": "1.0.0",
+  "description": "Put things in your knapsack as you go!",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "prepare": "husky install"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "fontoxpath": "^3.23.0",
+    "jsdom": "^19.0.0",
+    "node-fetch": "^3.1.0",
+    "puppeteer": "^13.0.1"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^16.2.14",
+    "@typescript-eslint/eslint-plugin": "^5.9.0",
+    "@typescript-eslint/parser": "^5.9.0",
+    "eslint": "^8.6.0",
+    "eslint-config-prettier": "^8.3.0",
+    "husky": "^7.0.4",
+    "lint-staged": "^12.1.7",
+    "prettier": "^2.5.1",
+    "typescript": "^4.5.4"
+  },
+  "lint-staged": {
+    "*.{js,css,md}": "prettier --write"
+  }
+}
