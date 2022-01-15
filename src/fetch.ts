@@ -1,4 +1,4 @@
-import { writeFile } from "fs/promises";
+import { writeFile, stat } from "fs/promises";
 import { join, basename } from "path";
 import { JSDOM } from "jsdom";
 import type { Response } from "node-fetch";
@@ -87,6 +87,7 @@ export const obtain = async (
         (e) => console.warn("Failed to fetch:", e)
       );
       if (!response) {
+        console.warn("Failed to fetch", itemURL);
         continue;
       }
       const content = await (await response.blob()).arrayBuffer();
@@ -100,10 +101,13 @@ export const obtain = async (
         }
       }
 
-      writeFile(
-        join(targetDirectory, `${fileName}${ext}`),
-        Buffer.from(content)
-      );
+      const targetPath = join(targetDirectory, `${fileName}${ext}`);
+      try {
+        await stat(targetPath);
+        console.warn("Refusing to overwrite", targetPath);
+      } catch {
+        await writeFile(targetPath, Buffer.from(content));
+      }
     } catch (e) {
       console.warn("Failed to obtain:", e);
     }
