@@ -1,6 +1,10 @@
+import { writeFile } from "fs/promises";
+import { join, basename } from "path";
 import { JSDOM } from "jsdom";
 import type { Response } from "node-fetch";
 import xpath from "fontoxpath";
+import { extension } from "mime-types";
+import mkdirp from "mkdirp";
 const { evaluateXPathToStrings } = xpath;
 
 type FetchWrapper = (url: string) => Promise<Response>;
@@ -15,7 +19,8 @@ export const traverse = async (
   nextPageSelector: string
 ) => {
   let items: string[] = [];
-  let frontier: string[] = startURLs;
+  const frontier: string[] = startURLs;
+  const seen: Set<string> = new Set();
   while (frontier.length > 0) {
     const nextURL = frontier.shift()!;
     console.info(nextURL);
@@ -27,10 +32,16 @@ export const traverse = async (
     const document = new JSDOM(pageContent).window.document;
 
     const selected = evaluateXPathToStrings(itemSelector, document);
-    items.push(...selected);
+    items.push(...selected.map((item) => resolveURL(item, nextURL)));
 
     const next = evaluateXPathToStrings(nextPageSelector, document);
-    frontier.push(...next.map((item) => resolveURL(item, nextURL)));
+    const nextURLs = next.map((item) => resolveURL(item, nextURL));
+    for (const url of nextURLs) {
+      if (!seen.has(url)) {
+        seen.add(url);
+        frontier.push(url);
+      }
+    }
   }
 
   return items;
@@ -59,6 +70,46 @@ export const extract = async (
   }
 
   return urls;
+};
+
+export const obtain = async (
+  doFetch: FetchWrapper,
+  targetDirectory: string,
+  itemURLs: string[]
+) => {
+  await mkdirp(targetDirectory);
+
+  for (const itemURL of itemURLs) {
+    try {
+      console.log(itemURL);
+      const response = await retryWithBackoff(
+        () => doFetch(itemURL),
+        (e) => console.warn("Failed to fetch:", e)
+      );
+      if (!response) {
+        continue;
+      }
+      const content = await (await response.blob()).arrayBuffer();
+      const fileName = basename(new URL(itemURL).pathname);
+
+      let ext = "";
+      if (fileName.indexOf(".") === -1) {
+        const contentType = response.headers.get("Content-Type");
+        if (contentType !== null) {
+          ext = `.${extension(contentType)}`;
+        }
+      }
+
+      writeFile(
+        join(targetDirectory, `${fileName}${ext}`),
+        Buffer.from(content)
+      );
+    } catch (e) {
+      console.warn("Failed to obtain:", e);
+    }
+  }
+
+  return itemURLs;
 };
 
 interface RetryConfig {
