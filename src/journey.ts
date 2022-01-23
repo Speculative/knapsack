@@ -37,7 +37,17 @@ const RecordStep = Record({
   fieldSelectors: Dictionary(String),
 });
 
-const StepType = Union(TraverseStep, ExtractStep, ObtainStep, RecordStep);
+const DebugStep = Record({
+  type: Literal("debug"),
+});
+
+const StepType = Union(
+  TraverseStep,
+  ExtractStep,
+  ObtainStep,
+  RecordStep,
+  DebugStep
+);
 
 const StepDefinition = Intersect(StepType, StepCommon);
 

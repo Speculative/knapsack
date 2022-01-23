@@ -1,11 +1,15 @@
 import { writeFile, stat } from "fs/promises";
 import { join, basename } from "path";
+import repl from "repl";
+
 import { JSDOM } from "jsdom";
 import type { Response } from "node-fetch";
-import xpath from "fontoxpath";
 import { extension } from "mime-types";
 import mkdirp from "mkdirp";
-const { evaluateXPathToStrings } = xpath;
+import prettier from "prettier";
+import { highlight } from "cli-highlight";
+import xpath from "fontoxpath";
+const { evaluateXPathToStrings, evaluateXPath } = xpath;
 
 type FetchWrapper = (url: string) => Promise<Response>;
 
@@ -81,7 +85,6 @@ export const obtain = async (
 
   for (const itemURL of itemURLs) {
     try {
-      console.log(itemURL);
       const response = await retryWithBackoff(
         () => doFetch(itemURL),
         (e) => console.warn("Failed to fetch:", e)
@@ -114,6 +117,101 @@ export const obtain = async (
   }
 
   return itemURLs;
+};
+
+const printElement = (element: HTMLElement) => {
+  console.log(
+    highlight(prettier.format(element.outerHTML.trim(), { parser: "html" }), {
+      language: "html",
+    })
+  );
+};
+
+export const debug = async (doFetch: FetchWrapper, itemURLs: string[]) => {
+  let currentURL = itemURLs.length > 0 ? itemURLs[0] : undefined;
+  let document: Document | undefined = undefined;
+
+  const replServer = repl.start({
+    prompt: "> ",
+    eval: (cmd, _, __, callback) => {
+      if (cmd === "\n") {
+        replServer.clearBufferedCommand();
+        replServer.displayPrompt();
+      } else if (!document) {
+        replServer.clearBufferedCommand();
+        console.log("No document loaded.");
+        replServer.displayPrompt();
+      } else {
+        const result = evaluateXPath(cmd, document);
+        const window = document.defaultView;
+        if (window && result instanceof window.HTMLElement) {
+          replServer.clearBufferedCommand();
+          printElement(result);
+          replServer.displayPrompt();
+        } else if (
+          window &&
+          result instanceof Array &&
+          result.length > 0 &&
+          result[0] instanceof window.HTMLElement
+        ) {
+          replServer.clearBufferedCommand();
+          console.log(`${result.length} results`);
+          result.forEach((item: HTMLElement, i) => {
+            console.log(`--- ${i} ---`);
+            printElement(item);
+          });
+          replServer.displayPrompt();
+        } else {
+          callback(null, result);
+        }
+      }
+    },
+  });
+  replServer.defineCommand("load", {
+    help: "load the given URL",
+    action: async (url) => {
+      replServer.clearBufferedCommand();
+      const response = await retryWithBackoff(
+        () => doFetch(url),
+        (e) => console.warn("Failed to fetch:", e)
+      );
+      const responseContent = await response!.text();
+      document = new JSDOM(responseContent).window.document;
+      currentURL = url;
+      replServer.displayPrompt();
+    },
+  });
+  replServer.defineCommand("current", {
+    help: "show the current document URL",
+    action: async () => {
+      replServer.clearBufferedCommand();
+      console.log(currentURL);
+      replServer.displayPrompt();
+    },
+  });
+  replServer.defineCommand("show", {
+    help: "print the current document",
+    action: async () => {
+      replServer.clearBufferedCommand();
+      if (!document) {
+        console.warn("No document loaded.");
+      } else {
+        console.log(
+          highlight(document?.documentElement.innerHTML, { language: "html" })
+        );
+      }
+      replServer.displayPrompt();
+    },
+  });
+  replServer.defineCommand("items", {
+    help: "list the current items",
+    action: async () => {
+      replServer.clearBufferedCommand();
+      console.log(itemURLs);
+      replServer.displayPrompt();
+    },
+  });
+  await new Promise((res) => replServer.on("exit", res));
 };
 
 interface RetryConfig {

@@ -3,7 +3,7 @@ import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { readFile } from "fs/promises";
 import { default as fetch, Headers } from "node-fetch";
-import { traverse, extract, obtain } from "./fetch.js";
+import { traverse, extract, obtain, debug } from "./fetch.js";
 import { getLoginCookies } from "./browser.js";
 import { Static, ValidationError } from "runtypes";
 import { JourneyDefinition } from "./journey.js";
@@ -91,6 +91,8 @@ export const executeJourney = async (
           currentResult
         );
         break;
+      case "debug":
+        await debug(fetchExecutor, currentResult);
       case "record":
         break;
       default:
